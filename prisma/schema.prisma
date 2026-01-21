@@ -1,0 +1,181 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id                String             @id @default(cuid())
+  clerkUserId       String             @unique
+  email             String
+  name              String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  
+  // Relationships
+  campaigns         Campaign[]
+  connectedAccounts ConnectedAccount[]
+  scheduledPosts    ScheduledPost[]
+  settings          UserSettings?
+  
+  @@index([clerkUserId])
+}
+
+model Campaign {
+  id                String          @id @default(cuid())
+  userId            String
+  name              String
+  sourceProfileUrl  String
+  sourcePlatform    String          // "tiktok", "instagram", "facebook"
+  status            String          @default("discovering") // "discovering", "discovered", "processing", "ready", "failed"
+  videosDiscovered  Int             @default(0)
+  videosSelected    Int             @default(0)
+  videosProcessed   Int             @default(0)
+  storageUsed       String          @default("0 MB")
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  
+  // Relationships
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceVideos      SourceVideo[]
+  processedVideos   ProcessedVideo[]
+  scheduledPosts    ScheduledPost[]
+  
+  @@index([userId])
+  @@index([status])
+}
+
+model SourceVideo {
+  id              String           @id @default(cuid())
+  campaignId      String
+  originalUrl     String
+  downloadedUrl   String?
+  caption         String           @db.Text
+  thumbnailUrl    String
+  duration        Int              // in seconds
+  viewCount       Int?
+  uploadedAt      DateTime
+  selected        Boolean          @default(true)
+  downloaded      Boolean          @default(false)
+  status          String           @default("pending") // "pending", "downloading", "downloaded", "failed"
+  errorMessage    String?          @db.Text
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  
+  // Relationships
+  campaign        Campaign         @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  processedVideos ProcessedVideo[]
+  scheduledPosts  ScheduledPost[]
+  
+  @@index([campaignId])
+  @@index([status])
+}
+
+model ProcessedVideo {
+  id                    String          @id @default(cuid())
+  sourceVideoId         String
+  campaignId            String
+  processedUrl          String?         // Nullable until processing completes
+  versionNumber         Int
+  modificationSettings  Json            // Speed, brightness, saturation, crop, audio, flip, rotation, noise
+  qualityVerified       Boolean         @default(false)
+  qualityFlags          Json?           // Array of quality issues detected
+  status                String          @default("pending") // "pending", "processing", "completed", "failed", "reprocessing"
+  errorMessage          String?         // Store error details if failed
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  
+  // Relationships
+  sourceVideo           SourceVideo     @relation(fields: [sourceVideoId], references: [id], onDelete: Cascade)
+  campaign              Campaign        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  scheduledPosts        ScheduledPost[]
+  
+  @@index([sourceVideoId])
+  @@index([campaignId])
+  @@index([status])
+}
+
+model ConnectedAccount {
+  id                  String          @id @default(cuid())
+  userId              String
+  platform            String          // "tiktok", "instagram", "facebook"
+  platformAccountId   String
+  platformAccountName String
+  followerCount       Int?
+  ayrshareProfileKey  String
+  accessToken         String?         @db.Text
+  refreshToken        String?         @db.Text
+  tokenExpiresAt      DateTime?
+  isActive            Boolean         @default(true)
+  lastAuthAt          DateTime        @default(now())
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  
+  // Relationships
+  user                User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scheduledPosts      ScheduledPost[]
+  
+  @@unique([userId, platform, platformAccountId])
+  @@index([userId])
+  @@index([platform])
+}
+
+model ScheduledPost {
+  id                  String            @id @default(cuid())
+  userId              String
+  processedVideoId    String?
+  sourceVideoId       String?
+  connectedAccountId  String
+  campaignId          String
+  caption             String            @db.Text
+  scheduledAt         DateTime
+  status              String            @default("scheduled") // "scheduled", "processing", "posted", "failed", "paused"
+  ayrsharePostId      String?
+  platformPostUrl     String?
+  postedAt            DateTime?
+  viewCount           Int?
+  likeCount           Int?
+  commentCount        Int?
+  shareCount          Int?
+  errorMessage        String?           @db.Text
+  retryCount          Int               @default(0)
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  
+  // Relationships
+  user                User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  processedVideo      ProcessedVideo?   @relation(fields: [processedVideoId], references: [id], onDelete: SetNull)
+  sourceVideo         SourceVideo?      @relation(fields: [sourceVideoId], references: [id], onDelete: SetNull)
+  connectedAccount    ConnectedAccount  @relation(fields: [connectedAccountId], references: [id], onDelete: Cascade)
+  campaign            Campaign          @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([connectedAccountId])
+  @@index([campaignId])
+  @@index([scheduledAt])
+  @@index([status])
+}
+
+model UserSettings {
+  id                String    @id @default(cuid())
+  userId            String    @unique
+  notificationEmail Boolean   @default(true)
+  notificationPush  Boolean   @default(true)
+  autoRetryFailed   Boolean   @default(true)
+  maxRetries        Int       @default(3)
+  timezone          String    @default("America/Phoenix")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Relationships
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+}
