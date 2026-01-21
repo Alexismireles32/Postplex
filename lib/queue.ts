@@ -1,27 +1,5 @@
-import { Queue, QueueEvents } from 'bullmq';
-import { Redis } from 'ioredis';
+import { Queue, QueueEvents, ConnectionOptions } from 'bullmq';
 import type { VideoProcessingJob, VideoDownloadJob, PostScheduleJob } from '@/types';
-
-// Validate Redis URL
-const redisUrl = process.env.REDIS_URL;
-if (!redisUrl && process.env.NODE_ENV === 'production') {
-  throw new Error('REDIS_URL environment variable is not set');
-}
-
-// Create Redis connection for Upstash (supports SSL/TLS)
-const connection = redisUrl
-  ? new Redis(redisUrl, {
-      maxRetriesPerRequest: null,
-      enableReadyCheck: false,
-      tls: redisUrl.startsWith('rediss://') ? {} : undefined, // Enable TLS for Upstash
-      family: 6, // Use IPv6 if available
-    })
-  : new Redis({
-      host: 'localhost',
-      port: 6379,
-      maxRetriesPerRequest: null,
-      enableReadyCheck: false,
-    });
 
 // Queue names
 export const QUEUE_NAMES = {
@@ -30,24 +8,39 @@ export const QUEUE_NAMES = {
   POST_SCHEDULE: 'post-schedule',
 } as const;
 
-// Connection options for BullMQ
-const connectionOptions = redisUrl
-  ? {
-      host: new URL(redisUrl).hostname,
-      port: parseInt(new URL(redisUrl).port) || 6379,
-      password: new URL(redisUrl).password || undefined,
-      tls: redisUrl.startsWith('rediss://') ? {} : undefined,
-    }
-  : {
-      host: 'localhost',
-      port: 6379,
-    };
+// Lazy initialization of Redis connection options
+// This allows the module to be imported during build time without throwing errors
+function getConnectionOptions(): ConnectionOptions {
+  const redisUrl = process.env.REDIS_URL;
+  
+  // Only validate in production at runtime (not during build)
+  if (!redisUrl && process.env.NODE_ENV === 'production' && typeof window === 'undefined') {
+    console.warn('REDIS_URL environment variable is not set. Queues will not function properly.');
+  }
 
-// Create queues
+  return redisUrl
+    ? {
+        host: new URL(redisUrl).hostname,
+        port: parseInt(new URL(redisUrl).port || '6379'),
+        password: new URL(redisUrl).password,
+        maxRetriesPerRequest: null,
+        enableReadyCheck: false,
+        tls: redisUrl.startsWith('rediss://') ? {} : undefined,
+        family: 6,
+      }
+    : {
+        host: 'localhost',
+        port: 6379,
+        maxRetriesPerRequest: null,
+        enableReadyCheck: false,
+      };
+}
+
+// Create queues with lazy connection
 export const videoDownloadQueue = new Queue<VideoDownloadJob>(
   QUEUE_NAMES.VIDEO_DOWNLOAD,
   {
-    connection: connectionOptions,
+    connection: getConnectionOptions(),
     defaultJobOptions: {
       attempts: 3,
       backoff: {
@@ -68,7 +61,7 @@ export const videoDownloadQueue = new Queue<VideoDownloadJob>(
 export const videoProcessingQueue = new Queue<VideoProcessingJob>(
   QUEUE_NAMES.VIDEO_PROCESSING,
   {
-    connection: connectionOptions,
+    connection: getConnectionOptions(),
     defaultJobOptions: {
       attempts: 2,
       backoff: {
@@ -89,7 +82,7 @@ export const videoProcessingQueue = new Queue<VideoProcessingJob>(
 export const postScheduleQueue = new Queue<PostScheduleJob>(
   QUEUE_NAMES.POST_SCHEDULE,
   {
-    connection: connectionOptions,
+    connection: getConnectionOptions(),
     defaultJobOptions: {
       attempts: 3,
       backoff: {
@@ -107,17 +100,17 @@ export const postScheduleQueue = new Queue<PostScheduleJob>(
   }
 );
 
-// Queue events for monitoring
+// Queue events for monitoring (lazy initialization)
 export const videoDownloadEvents = new QueueEvents(QUEUE_NAMES.VIDEO_DOWNLOAD, {
-  connection: connectionOptions,
+  connection: getConnectionOptions(),
 });
 
 export const videoProcessingEvents = new QueueEvents(QUEUE_NAMES.VIDEO_PROCESSING, {
-  connection: connectionOptions,
+  connection: getConnectionOptions(),
 });
 
 export const postScheduleEvents = new QueueEvents(QUEUE_NAMES.POST_SCHEDULE, {
-  connection: connectionOptions,
+  connection: getConnectionOptions(),
 });
 
 // Helper functions to add jobs
@@ -155,10 +148,6 @@ export async function getQueueHealth() {
   };
 }
 
-// Backward compatibility exports
-export const videoQueue = videoProcessingQueue;
-export const postQueue = postScheduleQueue;
-
 // Graceful shutdown
 export async function closeQueues() {
   await Promise.all([
@@ -168,6 +157,5 @@ export async function closeQueues() {
     videoDownloadEvents.close(),
     videoProcessingEvents.close(),
     postScheduleEvents.close(),
-    connection.quit(),
   ]);
 }
