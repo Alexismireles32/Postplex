@@ -1,6 +1,9 @@
 # Use Node.js 20 Alpine as base image
 FROM node:20-alpine AS base
 
+# Cache bust: 2026-01-22-v2
+ARG CACHE_BUST=2
+
 # Install FFmpeg and other dependencies
 RUN apk add --no-cache \
     ffmpeg \
