@@ -1,16 +1,29 @@
 import Stripe from 'stripe';
 
-// Validate Stripe key
-const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+// Lazy initialization to avoid build-time errors
+let _stripeClient: Stripe | null = null;
 
-if (!stripeSecretKey && process.env.NODE_ENV === 'production') {
-  throw new Error('STRIPE_SECRET_KEY is not configured');
+function getStripeClient(): Stripe {
+  if (!_stripeClient) {
+    const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+    
+    if (!stripeSecretKey) {
+      console.warn('[Stripe] STRIPE_SECRET_KEY not configured - payment features will not work');
+    }
+    
+    _stripeClient = new Stripe(stripeSecretKey || '', {
+      apiVersion: '2025-02-24.acacia',
+      typescript: true,
+    });
+  }
+  return _stripeClient;
 }
 
-// Initialize Stripe client
-export const stripe = new Stripe(stripeSecretKey || '', {
-  apiVersion: '2025-02-24.acacia',
-  typescript: true,
+// Export a proxy that lazily initializes Stripe
+export const stripe = new Proxy({} as Stripe, {
+  get(_, prop) {
+    return getStripeClient()[prop as keyof Stripe];
+  },
 });
 
 // Subscription plans configuration

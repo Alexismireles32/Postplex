@@ -2,27 +2,43 @@ import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, Head
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { R2UploadResult } from '@/types';
 
-// Validate environment variables
-const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-const endpoint = process.env.R2_ENDPOINT;
-const bucketName = process.env.R2_BUCKET_NAME || 'postplex-videos';
-const publicUrl = process.env.R2_PUBLIC_URL;
+// Lazy initialization to avoid build-time errors
+let _r2Client: S3Client | null = null;
 
-if (!accessKeyId || !secretAccessKey || !endpoint || !bucketName) {
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error('R2 storage configuration is incomplete. Check environment variables.');
-  }
-  console.warn('R2 storage not configured. Some features will not work.');
+function getR2Config() {
+  return {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID || '',
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || '',
+    endpoint: process.env.R2_ENDPOINT || '',
+    bucketName: process.env.R2_BUCKET_NAME || 'postplex-videos',
+    publicUrl: process.env.R2_PUBLIC_URL || '',
+  };
 }
 
-// Create S3 client configured for Cloudflare R2
-export const r2Client = new S3Client({
-  region: 'auto',
-  endpoint: endpoint || '',
-  credentials: {
-    accessKeyId: accessKeyId || '',
-    secretAccessKey: secretAccessKey || '',
+function getR2Client(): S3Client {
+  if (!_r2Client) {
+    const config = getR2Config();
+    
+    if (!config.accessKeyId || !config.secretAccessKey || !config.endpoint) {
+      console.warn('[R2 Storage] Configuration incomplete - video storage features will not work');
+    }
+    
+    _r2Client = new S3Client({
+      region: 'auto',
+      endpoint: config.endpoint,
+      credentials: {
+        accessKeyId: config.accessKeyId,
+        secretAccessKey: config.secretAccessKey,
+      },
+    });
+  }
+  return _r2Client;
+}
+
+// Export the client getter for backward compatibility
+export const r2Client = new Proxy({} as S3Client, {
+  get(_, prop) {
+    return getR2Client()[prop as keyof S3Client];
   },
 });
 
@@ -34,28 +50,30 @@ export async function uploadToR2(
   key: string,
   contentType: string = 'video/mp4'
 ): Promise<R2UploadResult> {
-  if (!bucketName) {
+  const config = getR2Config();
+  
+  if (!config.bucketName) {
     throw new Error('R2_BUCKET_NAME is not configured');
   }
 
   const buffer = file instanceof Blob ? Buffer.from(await file.arrayBuffer()) : Buffer.from(file);
 
   const command = new PutObjectCommand({
-    Bucket: bucketName,
+    Bucket: config.bucketName,
     Key: key,
     Body: buffer,
     ContentType: contentType,
   });
 
-  await r2Client.send(command);
+  await getR2Client().send(command);
 
   // Construct the public URL
-  const url = publicUrl ? `${publicUrl}/${key}` : `${endpoint}/${bucketName}/${key}`;
+  const url = config.publicUrl ? `${config.publicUrl}/${key}` : `${config.endpoint}/${config.bucketName}/${key}`;
 
   return {
     url,
     key,
-    bucket: bucketName,
+    bucket: config.bucketName,
     size: buffer.length,
   };
 }
@@ -64,16 +82,18 @@ export async function uploadToR2(
  * Download a file from R2 storage
  */
 export async function downloadFromR2(key: string): Promise<Buffer> {
-  if (!bucketName) {
+  const config = getR2Config();
+  
+  if (!config.bucketName) {
     throw new Error('R2_BUCKET_NAME is not configured');
   }
 
   const command = new GetObjectCommand({
-    Bucket: bucketName,
+    Bucket: config.bucketName,
     Key: key,
   });
 
-  const response = await r2Client.send(command);
+  const response = await getR2Client().send(command);
   
   if (!response.Body) {
     throw new Error('No body in R2 response');
@@ -92,16 +112,18 @@ export async function downloadFromR2(key: string): Promise<Buffer> {
  * Delete a file from R2 storage
  */
 export async function deleteFromR2(key: string): Promise<void> {
-  if (!bucketName) {
+  const config = getR2Config();
+  
+  if (!config.bucketName) {
     throw new Error('R2_BUCKET_NAME is not configured');
   }
 
   const command = new DeleteObjectCommand({
-    Bucket: bucketName,
+    Bucket: config.bucketName,
     Key: key,
   });
 
-  await r2Client.send(command);
+  await getR2Client().send(command);
 }
 
 /**
@@ -115,17 +137,19 @@ export async function deleteMultipleFromR2(keys: string[]): Promise<void> {
  * Check if a file exists in R2 storage
  */
 export async function fileExistsInR2(key: string): Promise<boolean> {
-  if (!bucketName) {
+  const config = getR2Config();
+  
+  if (!config.bucketName) {
     throw new Error('R2_BUCKET_NAME is not configured');
   }
 
   try {
     const command = new HeadObjectCommand({
-      Bucket: bucketName,
+      Bucket: config.bucketName,
       Key: key,
     });
 
-    await r2Client.send(command);
+    await getR2Client().send(command);
     return true;
   } catch {
     return false;
@@ -136,16 +160,18 @@ export async function fileExistsInR2(key: string): Promise<boolean> {
  * Get file metadata from R2 storage
  */
 export async function getR2FileMetadata(key: string) {
-  if (!bucketName) {
+  const config = getR2Config();
+  
+  if (!config.bucketName) {
     throw new Error('R2_BUCKET_NAME is not configured');
   }
 
   const command = new HeadObjectCommand({
-    Bucket: bucketName,
+    Bucket: config.bucketName,
     Key: key,
   });
 
-  const response = await r2Client.send(command);
+  const response = await getR2Client().send(command);
   
   return {
     size: response.ContentLength,
@@ -159,16 +185,18 @@ export async function getR2FileMetadata(key: string) {
  * Generate a signed URL for temporary access to a file
  */
 export async function getSignedR2Url(key: string, expiresIn: number = 3600): Promise<string> {
-  if (!bucketName) {
+  const config = getR2Config();
+  
+  if (!config.bucketName) {
     throw new Error('R2_BUCKET_NAME is not configured');
   }
 
   const command = new GetObjectCommand({
-    Bucket: bucketName,
+    Bucket: config.bucketName,
     Key: key,
   });
 
-  return getSignedUrl(r2Client, command, { expiresIn });
+  return getSignedUrl(getR2Client(), command, { expiresIn });
 }
 
 /**

@@ -12,8 +12,9 @@ export class AyrshareClient {
   constructor(apiKey?: string) {
     this.apiKey = apiKey || process.env.AYRSHARE_API_KEY || '';
     
-    if (!this.apiKey && process.env.NODE_ENV === 'production') {
-      throw new Error('AYRSHARE_API_KEY is not configured');
+    // Don't throw during build - just warn. Errors will happen at runtime when used.
+    if (!this.apiKey) {
+      console.warn('[Ayrshare] API key not configured - social media posting will not work');
     }
 
     this.client = axios.create({
@@ -24,6 +25,13 @@ export class AyrshareClient {
       },
       timeout: 30000, // 30 seconds
     });
+  }
+  
+  /**
+   * Check if the client is properly configured
+   */
+  isConfigured(): boolean {
+    return !!this.apiKey;
   }
 
   /**
@@ -272,5 +280,43 @@ export class AyrshareClient {
   }
 }
 
-// Export a singleton instance
-export const ayrshare = new AyrshareClient();
+// Export a lazily-initialized singleton instance
+let _ayrshareClient: AyrshareClient | null = null;
+
+export const ayrshare = {
+  get client(): AyrshareClient {
+    if (!_ayrshareClient) {
+      _ayrshareClient = new AyrshareClient();
+    }
+    return _ayrshareClient;
+  },
+  
+  isConfigured(): boolean {
+    return this.client.isConfigured();
+  },
+  
+  createPost: (...args: Parameters<AyrshareClient['createPost']>) => 
+    ayrshare.client.createPost(...args),
+  schedulePost: (...args: Parameters<AyrshareClient['schedulePost']>) => 
+    ayrshare.client.schedulePost(...args),
+  getPost: (...args: Parameters<AyrshareClient['getPost']>) => 
+    ayrshare.client.getPost(...args),
+  deletePost: (...args: Parameters<AyrshareClient['deletePost']>) => 
+    ayrshare.client.deletePost(...args),
+  getHistory: (...args: Parameters<AyrshareClient['getHistory']>) => 
+    ayrshare.client.getHistory(...args),
+  getAnalytics: (...args: Parameters<AyrshareClient['getAnalytics']>) => 
+    ayrshare.client.getAnalytics(...args),
+  createProfile: (...args: Parameters<AyrshareClient['createProfile']>) => 
+    ayrshare.client.createProfile(...args),
+  getProfiles: (...args: Parameters<AyrshareClient['getProfiles']>) => 
+    ayrshare.client.getProfiles(...args),
+  deleteProfile: (...args: Parameters<AyrshareClient['deleteProfile']>) => 
+    ayrshare.client.deleteProfile(...args),
+  generateJWT: (...args: Parameters<AyrshareClient['generateJWT']>) => 
+    ayrshare.client.generateJWT(...args),
+  uploadMedia: (...args: Parameters<AyrshareClient['uploadMedia']>) => 
+    ayrshare.client.uploadMedia(...args),
+  getUser: (...args: Parameters<AyrshareClient['getUser']>) => 
+    ayrshare.client.getUser(...args),
+};

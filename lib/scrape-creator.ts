@@ -15,8 +15,9 @@ export class ScrapeCreatorClient {
   constructor(apiKey?: string) {
     this.apiKey = apiKey || process.env.SCRAPE_CREATOR_API_KEY || 'QI7CjLkt2CVKn9jLHGDCQQrELHY2';
     
-    if (!this.apiKey && process.env.NODE_ENV === 'production') {
-      throw new Error('SCRAPE_CREATOR_API_KEY is not configured');
+    // Don't throw during build - just warn. Errors will happen at runtime when used.
+    if (!this.apiKey) {
+      console.warn('[ScrapeCreator] API key not configured - video scraping will not work');
     }
 
     this.client = axios.create({
@@ -27,6 +28,13 @@ export class ScrapeCreatorClient {
       },
       timeout: 60000, // 60 seconds for scraping operations
     });
+  }
+  
+  /**
+   * Check if the client is properly configured
+   */
+  isConfigured(): boolean {
+    return !!this.apiKey;
   }
 
   /**
@@ -201,5 +209,37 @@ export class ScrapeCreatorClient {
   }
 }
 
-// Export a singleton instance
-export const scrapeCreator = new ScrapeCreatorClient();
+// Export a lazily-initialized singleton instance
+let _scrapeCreatorClient: ScrapeCreatorClient | null = null;
+
+export const scrapeCreator = {
+  get client(): ScrapeCreatorClient {
+    if (!_scrapeCreatorClient) {
+      _scrapeCreatorClient = new ScrapeCreatorClient();
+    }
+    return _scrapeCreatorClient;
+  },
+  
+  isConfigured(): boolean {
+    return this.client.isConfigured();
+  },
+  
+  scrapeProfile: (...args: Parameters<ScrapeCreatorClient['scrapeProfile']>) => 
+    scrapeCreator.client.scrapeProfile(...args),
+  scrapeTikTok: (...args: Parameters<ScrapeCreatorClient['scrapeTikTok']>) => 
+    scrapeCreator.client.scrapeTikTok(...args),
+  scrapeInstagram: (...args: Parameters<ScrapeCreatorClient['scrapeInstagram']>) => 
+    scrapeCreator.client.scrapeInstagram(...args),
+  scrapeFacebook: (...args: Parameters<ScrapeCreatorClient['scrapeFacebook']>) => 
+    scrapeCreator.client.scrapeFacebook(...args),
+  getJobStatus: (...args: Parameters<ScrapeCreatorClient['getJobStatus']>) => 
+    scrapeCreator.client.getJobStatus(...args),
+  getProfileInfo: (...args: Parameters<ScrapeCreatorClient['getProfileInfo']>) => 
+    scrapeCreator.client.getProfileInfo(...args),
+  downloadVideo: (...args: Parameters<ScrapeCreatorClient['downloadVideo']>) => 
+    scrapeCreator.client.downloadVideo(...args),
+  validateProfile: (...args: Parameters<ScrapeCreatorClient['validateProfile']>) => 
+    scrapeCreator.client.validateProfile(...args),
+  getUsageStats: (...args: Parameters<ScrapeCreatorClient['getUsageStats']>) => 
+    scrapeCreator.client.getUsageStats(...args),
+};
