@@ -132,7 +132,7 @@ export class ScrapeCreatorClient {
     let hasMore = true;
     let maxCursor: string | number | undefined = undefined;
     let pageCount = 0;
-    const maxPages = 50; // Safety limit to prevent infinite loops
+    const maxPages = 20; // Reasonable limit (20 pages * 20 videos = 400 videos max)
     
     // Paginate through all videos using max_cursor
     while (hasMore && pageCount < maxPages) {
@@ -149,30 +149,53 @@ export class ScrapeCreatorClient {
       
       console.log(`[ScrapeCreator] Fetching page ${pageCount}${maxCursor ? ` (cursor: ${maxCursor})` : ''}`);
       
-      const response = await this.client.get<V3TikTokResponse>(endpoint, { params });
-      const data = response.data;
+      try {
+        const response = await this.client.get<V3TikTokResponse>(endpoint, { params });
+        const data = response.data;
 
-      if (data.status_code !== 0) {
-        throw new Error(`TikTok API returned status ${data.status_code}: ${data.status_msg}`);
+        if (data.status_code !== 0) {
+          console.error(`[ScrapeCreator] API error on page ${pageCount}:`, data.status_msg);
+          throw new Error(`TikTok API returned status ${data.status_code}: ${data.status_msg}`);
+        }
+
+        if (!data.aweme_list || data.aweme_list.length === 0) {
+          console.log(`[ScrapeCreator] No more videos on page ${pageCount}`);
+          break;
+        }
+
+        // Add videos from this page
+        allVideos = allVideos.concat(data.aweme_list);
+        console.log(`[ScrapeCreator] Page ${pageCount}: Found ${data.aweme_list.length} videos (total: ${allVideos.length})`);
+
+        // Check if there are more pages
+        hasMore = data.has_more === 1;
+        maxCursor = data.max_cursor;
+        
+        if (!hasMore) {
+          console.log('[ScrapeCreator] Reached last page');
+          break;
+        }
+
+        // Add a small delay between requests to avoid rate limiting
+        if (hasMore && pageCount < maxPages) {
+          await new Promise(resolve => setTimeout(resolve, 500)); // 500ms delay
+        }
+      } catch (error) {
+        console.error(`[ScrapeCreator] Error fetching page ${pageCount}:`, error);
+        
+        // If we already have some videos, return what we have instead of failing completely
+        if (allVideos.length > 0) {
+          console.log(`[ScrapeCreator] Partial success: Returning ${allVideos.length} videos from ${pageCount - 1} pages`);
+          break;
+        }
+        
+        // If no videos yet, rethrow the error
+        throw error;
       }
+    }
 
-      if (!data.aweme_list || data.aweme_list.length === 0) {
-        console.log(`[ScrapeCreator] No more videos on page ${pageCount}`);
-        break;
-      }
-
-      // Add videos from this page
-      allVideos = allVideos.concat(data.aweme_list);
-      console.log(`[ScrapeCreator] Page ${pageCount}: Found ${data.aweme_list.length} videos (total: ${allVideos.length})`);
-
-      // Check if there are more pages
-      hasMore = data.has_more === 1;
-      maxCursor = data.max_cursor;
-      
-      if (!hasMore) {
-        console.log('[ScrapeCreator] Reached last page');
-        break;
-      }
+    if (pageCount >= maxPages) {
+      console.log(`[ScrapeCreator] Reached max page limit (${maxPages}), stopping pagination`);
     }
 
     if (allVideos.length === 0) {

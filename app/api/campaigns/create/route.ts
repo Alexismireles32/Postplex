@@ -4,6 +4,9 @@ import { prisma } from '@/lib/db';
 import { parseSocialMediaUrl } from '@/lib/social-media';
 import { scrapeCreator } from '@/lib/scrape-creator';
 
+// Increase timeout for video discovery (can take time with pagination)
+export const maxDuration = 60; // 60 seconds
+
 export async function POST(request: NextRequest) {
   try {
     // Check authentication
@@ -44,12 +47,19 @@ export async function POST(request: NextRequest) {
 
     try {
       // Call ScrapeCreator API to discover videos
+      console.log(`[API] Starting video discovery for ${platform}/@${username}`);
+      const startTime = Date.now();
+      
       const response = await scrapeCreator.scrapeProfile({
         profileUrl: profileUrl,
         platform: platform as 'tiktok' | 'instagram' | 'facebook',
       });
 
+      const duration = Date.now() - startTime;
+      console.log(`[API] Video discovery completed in ${duration}ms`);
+
       const videos = response.videos;
+      console.log(`[API] Found ${videos.length} videos`);
 
       if (videos.length === 0) {
         await prisma.campaign.update({
