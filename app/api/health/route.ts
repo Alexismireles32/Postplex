@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server';
 import { checkDatabaseConnection } from '@/lib/db';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
-  // Debug: log DATABASE_URL (masked)
+  // Read DATABASE_URL at runtime
   const dbUrl = process.env.DATABASE_URL || 'NOT_SET';
-  const maskedUrl = dbUrl.includes('@') 
-    ? dbUrl.replace(/:([^@]+)@/, ':***@').substring(0, 80) + '...'
-    : dbUrl.substring(0, 50);
-  console.log('[Health] DATABASE_URL:', maskedUrl);
+  const dbHost = dbUrl.includes('@') ? dbUrl.split('@')[1]?.split('/')[0] : 'unknown';
+  
+  console.log('[Health] DATABASE_URL host:', dbHost);
   
   try {
     const dbConnected = await checkDatabaseConnection();
@@ -17,15 +18,16 @@ export async function GET() {
       timestamp: new Date().toISOString(),
       database: dbConnected ? 'connected' : 'connecting',
       app: 'running',
-      dbHost: dbUrl.includes('@') ? dbUrl.split('@')[1]?.split('/')[0] : 'unknown',
+      dbHost: dbHost,
     });
   } catch (error) {
+    console.error('[Health] DB error:', error);
     return NextResponse.json({
       status: 'healthy',
       timestamp: new Date().toISOString(),
       database: 'error',
       app: 'running',
-      dbHost: dbUrl.includes('@') ? dbUrl.split('@')[1]?.split('/')[0] : 'unknown',
+      dbHost: dbHost,
     });
   }
 }
