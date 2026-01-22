@@ -24,7 +24,7 @@ const connectionOptions = redisUrl
     };
 
 interface VideoDownloadJob {
-  videoId: string;
+  sourceVideoId: string;  // Fixed: matches queue.ts interface
   campaignId: string;
   videoUrl: string;
   thumbnailUrl: string;
@@ -93,42 +93,42 @@ async function updateVideoStatus(
  * Process video download job
  */
 async function processVideoDownload(job: Job<VideoDownloadJob>) {
-  const { videoId, videoUrl, thumbnailUrl } = job.data;
+  const { sourceVideoId, videoUrl } = job.data;
 
-  console.log(`[Worker] Processing video download: ${videoId}`);
+  console.log(`[Worker] Processing video download: ${sourceVideoId}`);
 
   try {
     // Update status to downloading
-    await updateVideoStatus(videoId, 'downloading');
+    await updateVideoStatus(sourceVideoId, 'downloading');
 
     // Download video from public URL
     console.log(`[Worker] Downloading video from: ${videoUrl}`);
     const videoBuffer = await downloadVideo(videoUrl);
 
     // Generate filename
-    const filename = generateVideoFilename(videoId);
+    const filename = generateVideoFilename(sourceVideoId);
 
     // Upload to R2
     console.log(`[Worker] Uploading to R2: ${filename}`);
     const r2Url = await uploadToR2(videoBuffer, filename);
 
     // Update database with success
-    await updateVideoStatus(videoId, 'downloaded', undefined, r2Url, videoBuffer.length);
+    await updateVideoStatus(sourceVideoId, 'downloaded', undefined, r2Url, videoBuffer.length);
 
-    console.log(`[Worker] Successfully processed video: ${videoId}`);
+    console.log(`[Worker] Successfully processed video: ${sourceVideoId}`);
 
     return {
       success: true,
-      videoId,
+      sourceVideoId,
       downloadedUrl: r2Url,
       fileSize: videoBuffer.length,
     };
   } catch (error: unknown) {
     const err = error as { message?: string };
-    console.error(`[Worker] Error processing video ${videoId}:`, err);
+    console.error(`[Worker] Error processing video ${sourceVideoId}:`, err);
 
     // Update database with failure
-    await updateVideoStatus(videoId, 'failed', err.message || 'Download failed');
+    await updateVideoStatus(sourceVideoId, 'failed', err.message || 'Download failed');
 
     // Rethrow so BullMQ can handle retries
     throw error;
@@ -139,7 +139,7 @@ async function processVideoDownload(job: Job<VideoDownloadJob>) {
  * Create and start the worker
  */
 function startWorker() {
-  const worker = new Worker('video-processing', processVideoDownload, {
+  const worker = new Worker('video-download', processVideoDownload, {
     connection: connectionOptions as never,
     concurrency: 5, // Process up to 5 videos simultaneously
     limiter: {
@@ -168,7 +168,7 @@ function startWorker() {
   console.log('🚀 Video downloader worker started!');
   console.log('   Concurrency: 5 videos at a time');
   console.log('   Rate limit: 10 videos per second');
-  console.log('   Listening for jobs on queue: video-processing');
+  console.log('   Listening for jobs on queue: video-download');
 
   return worker;
 }
