@@ -17,13 +17,13 @@ export default async function DashboardPage() {
   }
 
   // Get user from database
-  const dbUser = await prisma.user.findUnique({
+  let dbUser = await prisma.user.findUnique({
     where: { authUserId: user.id },
   })
 
   if (!dbUser) {
     // Create user if doesn't exist
-    await prisma.user.create({
+    dbUser = await prisma.user.create({
       data: {
         authUserId: user.id,
         email: user.email || 'unknown@postplex.com',
@@ -35,18 +35,18 @@ export default async function DashboardPage() {
   // Get user stats
   const [campaignCount, videoCount, scheduledPostCount] = await Promise.all([
     prisma.campaign.count({
-      where: { userId: dbUser?.id || user.id },
+      where: { userId: dbUser.id },
     }),
     prisma.sourceVideo.count({
       where: {
         campaign: {
-          userId: dbUser?.id || user.id,
+          userId: dbUser.id,
         },
       },
     }),
     prisma.scheduledPost.count({
       where: {
-        userId: dbUser?.id || user.id,
+        userId: dbUser.id,
       },
     }),
   ])
