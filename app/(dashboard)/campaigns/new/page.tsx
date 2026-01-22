@@ -44,7 +44,11 @@ export default function NewCampaignPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        setError(data.error || 'Failed to discover videos');
+        const errorMsg = data.details 
+          ? `${data.error}\n\nDetails: ${data.details}` 
+          : data.error || 'Failed to discover videos';
+        setError(errorMsg);
+        console.error('API Error:', data);
         setIsLoading(false);
         return;
       }
@@ -53,7 +57,8 @@ export default function NewCampaignPage() {
       router.push(`/campaigns/${data.campaign.id}/select`);
     } catch (err) {
       console.error('Error creating campaign:', err);
-      setError('Something went wrong. Please try again!');
+      const errorMsg = err instanceof Error ? err.message : 'Something went wrong. Please try again!';
+      setError(`Network Error: ${errorMsg}`);
       setIsLoading(false);
     }
   };

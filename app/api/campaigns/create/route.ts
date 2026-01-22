@@ -115,31 +115,52 @@ export async function POST(request: NextRequest) {
         },
       });
     } catch (error: unknown) {
-      const err = error as { message?: string };
-      console.error('Error discovering videos:', err);
+      const err = error as { message?: string; stack?: string; response?: { data?: unknown; status?: number } };
+      console.error('Error discovering videos:', {
+        message: err.message,
+        stack: err.stack,
+        response: err.response,
+      });
 
       // Update campaign status to failed
-      await prisma.campaign.update({
-        where: { id: campaign.id },
-        data: {
-          status: 'failed',
-        },
-      });
+      try {
+        await prisma.campaign.update({
+          where: { id: campaign.id },
+          data: {
+            status: 'failed',
+          },
+        });
+      } catch (updateError) {
+        console.error('Failed to update campaign status:', updateError);
+      }
 
       return NextResponse.json(
         {
           error: 'Failed to discover videos. Try again in a moment! ⏱️',
           details: err.message || 'Unknown error',
+          debugInfo: process.env.NODE_ENV === 'development' ? {
+            stack: err.stack,
+            response: err.response,
+          } : undefined,
           campaignId: campaign.id,
         },
         { status: 500 }
       );
     }
   } catch (error: unknown) {
-    const err = error as { message?: string };
-    console.error('Error creating campaign:', err);
+    const err = error as { message?: string; stack?: string };
+    console.error('Error creating campaign:', {
+      message: err.message,
+      stack: err.stack,
+    });
     return NextResponse.json(
-      { error: 'Internal server error', details: err.message || 'Unknown error' },
+      { 
+        error: 'Internal server error', 
+        details: err.message || 'Unknown error',
+        debugInfo: process.env.NODE_ENV === 'development' ? {
+          stack: err.stack,
+        } : undefined,
+      },
       { status: 500 }
     );
   }
