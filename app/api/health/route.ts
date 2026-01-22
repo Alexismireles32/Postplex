@@ -2,8 +2,14 @@ import { NextResponse } from 'next/server';
 import { checkDatabaseConnection } from '@/lib/db';
 
 export async function GET() {
+  // Debug: log DATABASE_URL (masked)
+  const dbUrl = process.env.DATABASE_URL || 'NOT_SET';
+  const maskedUrl = dbUrl.includes('@') 
+    ? dbUrl.replace(/:([^@]+)@/, ':***@').substring(0, 80) + '...'
+    : dbUrl.substring(0, 50);
+  console.log('[Health] DATABASE_URL:', maskedUrl);
+  
   try {
-    // Always return 200 so Railway doesn't kill the app while DB is connecting
     const dbConnected = await checkDatabaseConnection();
 
     return NextResponse.json({
@@ -11,15 +17,15 @@ export async function GET() {
       timestamp: new Date().toISOString(),
       database: dbConnected ? 'connected' : 'connecting',
       app: 'running',
+      dbHost: dbUrl.includes('@') ? dbUrl.split('@')[1]?.split('/')[0] : 'unknown',
     });
   } catch (error) {
-    // Even on error, return 200 so app stays alive
     return NextResponse.json({
       status: 'healthy',
       timestamp: new Date().toISOString(),
       database: 'error',
       app: 'running',
-      note: 'App is running but database may not be ready'
+      dbHost: dbUrl.includes('@') ? dbUrl.split('@')[1]?.split('/')[0] : 'unknown',
     });
   }
 }
