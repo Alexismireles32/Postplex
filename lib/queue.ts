@@ -29,8 +29,13 @@ function getConnectionOptions(): ConnectionOptions {
     password: new URL(redisUrl).password,
     maxRetriesPerRequest: null,
     enableReadyCheck: false,
-    tls: redisUrl.startsWith('rediss://') ? {} : undefined,
+    tls: redisUrl.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined,
     lazyConnect: true,
+    family: 4, // Force IPv4 to avoid DNS issues on Railway
+    retryStrategy: (times: number) => {
+      if (times > 3) return null; // Stop after 3 retries
+      return Math.min(times * 1000, 3000);
+    },
   };
 }
 
