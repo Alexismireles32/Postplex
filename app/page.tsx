@@ -2,15 +2,9 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { VideoIcon, CalendarIcon, SparklesIcon } from 'lucide-react';
 
-// Check if Clerk is configured
-const hasClerkKeys = 
-  process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && 
-  !process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY.includes('placeholder') &&
-  process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY.length > 20;
-
-// In development without Clerk, link to dashboard directly
-const ctaLink = hasClerkKeys ? '/sign-up' : '/campaigns';
-const signInLink = hasClerkKeys ? '/sign-in' : '/campaigns';
+// Auth pages (using Supabase Auth)
+const ctaLink = '/sign-up';
+const signInLink = '/sign-in';
 
 export default function LandingPage() {
   return (
@@ -24,7 +18,7 @@ export default function LandingPage() {
           </div>
           <div className="flex gap-4">
             <Button variant="ghost" asChild>
-              <Link href={signInLink}>{hasClerkKeys ? 'Sign In' : 'Go to Dashboard'}</Link>
+              <Link href={signInLink}>Sign In</Link>
             </Button>
             <Button asChild>
               <Link href={ctaLink}>Get Started</Link>
@@ -43,10 +37,10 @@ export default function LandingPage() {
         </p>
         <div className="flex justify-center gap-4">
           <Button size="lg" asChild>
-            <Link href={ctaLink}>{hasClerkKeys ? 'Start Free Trial' : 'Go to Dashboard'}</Link>
+            <Link href={ctaLink}>Start Free Trial</Link>
           </Button>
           <Button size="lg" variant="outline" asChild>
-            <Link href={signInLink}>{hasClerkKeys ? 'Sign In' : 'View Campaigns'}</Link>
+            <Link href={signInLink}>Sign In</Link>
           </Button>
         </div>
       </section>
