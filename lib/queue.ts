@@ -8,35 +8,61 @@ export const QUEUE_NAMES = {
   POST_SCHEDULE: 'post-schedule',
 } as const;
 
+// Check if Redis is enabled (for graceful degradation)
+const REDIS_ENABLED = !!process.env.REDIS_URL;
+let redisConnectionWarned = false;
+
 // Lazy initialization of Redis connection options
 function getConnectionOptions(): ConnectionOptions {
   const redisUrl = process.env.REDIS_URL;
 
   if (!redisUrl) {
-    console.warn('REDIS_URL environment variable is not set. Queues will not function properly.');
+    if (!redisConnectionWarned) {
+      console.warn('[Queue] REDIS_URL not set - queues disabled. Background jobs will not work.');
+      redisConnectionWarned = true;
+    }
+    // Return minimal config that won't try to connect
     return {
-      host: 'localhost',
+      host: '127.0.0.1', // Unreachable but won't spam DNS
       port: 6379,
       maxRetriesPerRequest: null,
       enableReadyCheck: false,
       lazyConnect: true,
+      retryStrategy: () => null, // Never retry
     };
   }
 
-  return {
-    host: new URL(redisUrl).hostname,
-    port: parseInt(new URL(redisUrl).port || '6379'),
-    password: new URL(redisUrl).password,
-    maxRetriesPerRequest: null,
-    enableReadyCheck: false,
-    tls: redisUrl.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined,
-    lazyConnect: true,
-    family: 4, // Force IPv4 to avoid DNS issues on Railway
-    retryStrategy: (times: number) => {
-      if (times > 3) return null; // Stop after 3 retries
-      return Math.min(times * 1000, 3000);
-    },
-  };
+  try {
+    const url = new URL(redisUrl);
+    return {
+      host: url.hostname,
+      port: parseInt(url.port || '6379'),
+      password: url.password || undefined,
+      maxRetriesPerRequest: null,
+      enableReadyCheck: false,
+      tls: redisUrl.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined,
+      lazyConnect: true,
+      family: 4, // Force IPv4 to avoid DNS issues on Railway
+      connectTimeout: 5000, // 5 second timeout
+      retryStrategy: (times: number) => {
+        if (times > 2) {
+          console.error(`[Queue] Redis connection failed after ${times} attempts, stopping retries`);
+          return null; // Stop retrying after 2 attempts
+        }
+        return Math.min(times * 2000, 5000); // 2s, 4s delays
+      },
+    };
+  } catch (error) {
+    console.error('[Queue] Invalid REDIS_URL format:', error);
+    return {
+      host: '127.0.0.1',
+      port: 6379,
+      maxRetriesPerRequest: null,
+      enableReadyCheck: false,
+      lazyConnect: true,
+      retryStrategy: () => null,
+    };
+  }
 }
 
 // Lazy singleton pattern - queues are only created when first accessed
@@ -160,26 +186,62 @@ export const postScheduleEvents = events;
 
 // Helper functions to add jobs (these create queues on first use)
 export async function addVideoDownloadJob(data: VideoDownloadJob) {
-  return queues.videoDownload.add('download', data, {
-    jobId: `download-${data.sourceVideoId}`,
-  });
+  if (!REDIS_ENABLED) {
+    console.warn('[Queue] Redis not configured - video download job not queued');
+    return null;
+  }
+  try {
+    return await queues.videoDownload.add('download', data, {
+      jobId: `download-${data.sourceVideoId}`,
+    });
+  } catch (error) {
+    console.error('[Queue] Failed to add video download job:', error);
+    throw error;
+  }
 }
 
 export async function addVideoProcessingJob(data: VideoProcessingJob) {
-  return queues.videoProcessing.add('process', data, {
-    jobId: `process-${data.sourceVideoId}-${Date.now()}`,
-  });
+  if (!REDIS_ENABLED) {
+    console.warn('[Queue] Redis not configured - video processing job not queued');
+    return null;
+  }
+  try {
+    return await queues.videoProcessing.add('process', data, {
+      jobId: `process-${data.sourceVideoId}-${Date.now()}`,
+    });
+  } catch (error) {
+    console.error('[Queue] Failed to add video processing job:', error);
+    throw error;
+  }
 }
 
 export async function addPostScheduleJob(data: PostScheduleJob, scheduleDate: Date) {
-  return queues.postSchedule.add('schedule', data, {
-    jobId: `post-${data.scheduledPostId}`,
-    delay: scheduleDate.getTime() - Date.now(),
-  });
+  if (!REDIS_ENABLED) {
+    console.warn('[Queue] Redis not configured - post schedule job not queued');
+    return null;
+  }
+  try {
+    return await queues.postSchedule.add('schedule', data, {
+      jobId: `post-${data.scheduledPostId}`,
+      delay: scheduleDate.getTime() - Date.now(),
+    });
+  } catch (error) {
+    console.error('[Queue] Failed to add post schedule job:', error);
+    throw error;
+  }
 }
 
 // Helper to get queue health
 export async function getQueueHealth() {
+  if (!REDIS_ENABLED) {
+    return {
+      videoDownload: null,
+      videoProcessing: null,
+      postSchedule: null,
+      error: 'Redis not configured',
+    };
+  }
+  
   try {
     const [downloadCounts, processingCounts, postCounts] = await Promise.all([
       queues.videoDownload.getJobCounts(),
@@ -193,7 +255,7 @@ export async function getQueueHealth() {
       postSchedule: postCounts,
     };
   } catch (error) {
-    console.error('Failed to get queue health:', error);
+    console.error('[Queue] Failed to get queue health:', error);
     return {
       videoDownload: null,
       videoProcessing: null,
