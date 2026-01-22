@@ -15,7 +15,7 @@ const routes = [
   {
     label: 'Dashboard',
     icon: LayoutDashboardIcon,
-    href: '/dashboard',
+    href: '/',
     color: 'text-sky-500',
   },
   {
@@ -50,7 +50,7 @@ export function Sidebar() {
   return (
     <div className="flex h-full w-72 flex-col bg-white border-r">
       <div className="flex h-16 items-center border-b px-6">
-        <Link href="/dashboard" className="flex items-center gap-2">
+        <Link href="/" className="flex items-center gap-2">
           <VideoIcon className="h-8 w-8 text-blue-600" />
           <span className="text-xl font-bold">Postplex</span>
         </Link>
