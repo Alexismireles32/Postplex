@@ -7,49 +7,58 @@ import Link from 'next/link'
 import { VideoIcon, CalendarIcon, TrendingUpIcon, PlusCircleIcon } from 'lucide-react'
 
 export default async function DashboardPage() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  try {
+    const supabase = await createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
-  if (!user) {
-    redirect('/sign-in')
-  }
+    if (!user) {
+      redirect('/sign-in')
+    }
 
-  // Get user from database
-  let dbUser = await prisma.user.findUnique({
-    where: { authUserId: user.id },
-  })
+    console.log('[Dashboard] User authenticated:', user.id)
 
-  if (!dbUser) {
-    // Create user if doesn't exist
-    dbUser = await prisma.user.create({
-      data: {
-        authUserId: user.id,
-        email: user.email || 'unknown@postplex.com',
-        name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
-      },
+    // Get user from database
+    let dbUser = await prisma.user.findUnique({
+      where: { authUserId: user.id },
     })
-  }
 
-  // Get user stats
-  const [campaignCount, videoCount, scheduledPostCount] = await Promise.all([
-    prisma.campaign.count({
-      where: { userId: dbUser.id },
-    }),
-    prisma.sourceVideo.count({
-      where: {
-        campaign: {
+    if (!dbUser) {
+      console.log('[Dashboard] Creating new user in database')
+      // Create user if doesn't exist
+      dbUser = await prisma.user.create({
+        data: {
+          authUserId: user.id,
+          email: user.email || 'unknown@postplex.com',
+          name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+        },
+      })
+      console.log('[Dashboard] User created:', dbUser.id)
+    }
+
+    console.log('[Dashboard] Fetching user stats for:', dbUser.id)
+
+    // Get user stats
+    const [campaignCount, videoCount, scheduledPostCount] = await Promise.all([
+      prisma.campaign.count({
+        where: { userId: dbUser.id },
+      }),
+      prisma.sourceVideo.count({
+        where: {
+          campaign: {
+            userId: dbUser.id,
+          },
+        },
+      }),
+      prisma.scheduledPost.count({
+        where: {
           userId: dbUser.id,
         },
-      },
-    }),
-    prisma.scheduledPost.count({
-      where: {
-        userId: dbUser.id,
-      },
-    }),
-  ])
+      }),
+    ])
+
+    console.log('[Dashboard] Stats loaded:', { campaignCount, videoCount, scheduledPostCount })
 
   return (
     <div className="container mx-auto py-8 px-4">
@@ -195,4 +204,32 @@ export default async function DashboardPage() {
       )}
     </div>
   )
+  } catch (error) {
+    console.error('[Dashboard] Error loading dashboard:', error)
+    
+    // Return error page
+    return (
+      <div className="container mx-auto py-8 px-4">
+        <Card className="border-2 border-red-200 bg-red-50">
+          <CardHeader>
+            <CardTitle className="text-xl text-red-600">⚠️ Dashboard Error</CardTitle>
+            <CardDescription>We encountered an issue loading your dashboard</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-gray-700">
+              {error instanceof Error ? error.message : 'An unexpected error occurred'}
+            </p>
+            <div className="flex gap-4">
+              <Link href="/sign-in">
+                <Button variant="outline">Sign In Again</Button>
+              </Link>
+              <Link href="/">
+                <Button>Back to Home</Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 }
