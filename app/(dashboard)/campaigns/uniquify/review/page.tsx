@@ -34,7 +34,7 @@ export default function ReviewResultsPage() {
       return;
     }
 
-    fetch(`/api/videos/uniquify/${campaignId}/results`)
+    fetch(`/api/campaigns/${campaignId}/uniquify/results`)
       .then(res => res.json())
       .then(data => {
         setVideos(data.videos || []);

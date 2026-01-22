@@ -4,14 +4,14 @@ import { prisma } from '@/lib/db';
 
 /**
  * Get processed videos results for review
- * GET /api/videos/uniquify/[campaignId]/results
+ * GET /api/campaigns/[id]/uniquify/results
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ campaignId: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { campaignId } = await params;
+    const { id: campaignId } = await params;
     const { user } = await getAuthUser();
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

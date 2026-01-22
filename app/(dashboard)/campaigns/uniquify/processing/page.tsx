@@ -41,7 +41,7 @@ export default function ProcessingProgressPage() {
 
     const fetchStatus = async () => {
       try {
-        const response = await fetch(`/api/videos/uniquify/${campaignId}/status`);
+        const response = await fetch(`/api/campaigns/${campaignId}/uniquify/status`);
         if (!response.ok) throw new Error('Failed to fetch status');
         
         const data = await response.json();
