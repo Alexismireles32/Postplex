@@ -13,7 +13,7 @@ datasource db {
 
 model User {
   id                String             @id @default(cuid())
-  clerkUserId       String             @unique
+  authUserId        String             @unique
   email             String
   name              String?
   createdAt         DateTime           @default(now())
@@ -25,7 +25,7 @@ model User {
   scheduledPosts    ScheduledPost[]
   settings          UserSettings?
   
-  @@index([clerkUserId])
+  @@index([authUserId])
 }
 
 model Campaign {

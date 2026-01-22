@@ -22,14 +22,14 @@ export async function getAuthUser() {
 
   // Get or create user in database
   let dbUser = await prisma.user.findUnique({
-    where: { clerkUserId: user.id }, // We're reusing the clerkUserId field for Supabase user ID
+    where: { authUserId: user.id }, // We're reusing the authUserId field for Supabase user ID
   })
 
   if (!dbUser) {
     // Auto-create user on first auth (they just signed up)
     dbUser = await prisma.user.create({
       data: {
-        clerkUserId: user.id, // Store Supabase user ID here
+        authUserId: user.id, // Store Supabase user ID here
         email: user.email || 'unknown@postplex.com',
         name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
       },
@@ -39,7 +39,7 @@ export async function getAuthUser() {
   return {
     user: {
       id: dbUser.id,
-      clerkId: dbUser.clerkUserId,
+      authUserId: dbUser.authUserId,
       email: dbUser.email,
     },
   }

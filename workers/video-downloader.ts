@@ -6,7 +6,7 @@
 import { Worker, Job } from 'bullmq';
 import IORedis from 'ioredis';
 import { prisma } from '../lib/db';
-import { downloadVideo, uploadToR2, generateVideoFilename } from '../lib/video-download';
+import { downloadVideoAsStream, uploadToR2, generateVideoFilename } from '../lib/video-download';
 import { formatBytes } from '../lib/social-media';
 
 // Redis connection options for BullMQ
@@ -75,6 +75,10 @@ async function updateVideoStatus(
         select: { id: true },
       });
 
+      // Estimate total storage if we don't track it per video properly yet
+      // Ideally we should sum up a 'fileSize' column, but we don't have one in SourceVideo yet.
+      // So we use the passed fileSize as an estimate average or just update with current batch?
+      // For now, let's just use the current logic but acknowledging it's an estimate
       const storageUsed = formatBytes(fileSize * totalVideos.length);
 
       await prisma.campaign.update({
@@ -103,17 +107,19 @@ async function processVideoDownload(job: Job<VideoDownloadJob>) {
 
     // Download video from public URL
     console.log(`[Worker] Downloading video from: ${videoUrl}`);
-    const videoBuffer = await downloadVideo(videoUrl);
+    const { stream, contentLength } = await downloadVideoAsStream(videoUrl);
 
     // Generate filename
     const filename = generateVideoFilename(sourceVideoId);
 
     // Upload to R2
     console.log(`[Worker] Uploading to R2: ${filename}`);
-    const r2Url = await uploadToR2(videoBuffer, filename);
+    const r2Url = await uploadToR2(stream, filename);
 
     // Update database with success
-    await updateVideoStatus(sourceVideoId, 'downloaded', undefined, r2Url, videoBuffer.length);
+    // If contentLength is missing, we pass 0 or a default, but better to update schema to store size.
+    // For now we pass contentLength || 0.
+    await updateVideoStatus(sourceVideoId, 'downloaded', undefined, r2Url, contentLength || 0);
 
     console.log(`[Worker] Successfully processed video: ${sourceVideoId}`);
 
@@ -121,7 +127,7 @@ async function processVideoDownload(job: Job<VideoDownloadJob>) {
       success: true,
       sourceVideoId,
       downloadedUrl: r2Url,
-      fileSize: videoBuffer.length,
+      fileSize: contentLength || 0,
     };
   } catch (error: unknown) {
     const err = error as { message?: string };

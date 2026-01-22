@@ -18,8 +18,23 @@ export default function SignInPage() {
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
 
+  // Show error if Supabase is not configured
+  if (!supabase) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
+        <div className="w-full max-w-md bg-white rounded-lg shadow-lg p-6 border-l-4 border-red-500">
+          <h2 className="text-xl font-bold text-red-700 mb-2">Configuration Error</h2>
+          <p className="text-gray-600">
+            Supabase environment variables are missing. Please check your deployment configuration.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   const handleEmailSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!supabase) return
     setLoading(true)
     setError(null)
 
@@ -38,6 +53,7 @@ export default function SignInPage() {
   }
 
   const handleGoogleSignIn = async () => {
+    if (!supabase) return
     setLoading(true)
     setError(null)
 
@@ -55,6 +71,7 @@ export default function SignInPage() {
   }
 
   const handleGitHubSignIn = async () => {
+    if (!supabase) return
     setLoading(true)
     setError(null)
 
@@ -73,6 +90,7 @@ export default function SignInPage() {
 
   const handleMagicLink = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!supabase) return
     setLoading(true)
     setError(null)
     setMessage(null)

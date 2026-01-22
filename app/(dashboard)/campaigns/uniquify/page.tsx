@@ -16,6 +16,7 @@ export default function UniquifySetupPage() {
   // Get selected video IDs from URL or state
   const videoIdsParam = searchParams.get('videoIds');
   const selectedVideoIds = videoIdsParam ? videoIdsParam.split(',') : [];
+  const serializedIds = selectedVideoIds.join(',');
   
   // State
   const [selectedPreset, setSelectedPreset] = useState<PresetName>('smart');
@@ -28,8 +29,8 @@ export default function UniquifySetupPage() {
 
   // Load video details
   useEffect(() => {
-    if (selectedVideoIds.length > 0) {
-      fetch(`/api/videos/batch?ids=${selectedVideoIds.join(',')}`)
+    if (serializedIds) {
+      fetch(`/api/videos/batch?ids=${serializedIds}`)
         .then(res => res.json())
         .then(data => {
           setVideos(data.videos || []);
@@ -42,7 +43,7 @@ export default function UniquifySetupPage() {
     } else {
       setLoading(false);
     }
-  }, [selectedVideoIds.join(',')]);
+  }, [serializedIds]);
 
   // Calculate estimates
   const totalVideos = selectedVideoIds.length * versionsPerVideo;

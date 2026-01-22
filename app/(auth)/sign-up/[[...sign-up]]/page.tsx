@@ -2,14 +2,12 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
 export default function SignUpPage() {
-  const router = useRouter()
   const supabase = createClient()
   
   const [email, setEmail] = useState('')
@@ -19,8 +17,23 @@ export default function SignUpPage() {
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
 
+  // Show error if Supabase is not configured
+  if (!supabase) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
+        <div className="w-full max-w-md bg-white rounded-lg shadow-lg p-6 border-l-4 border-red-500">
+          <h2 className="text-xl font-bold text-red-700 mb-2">Configuration Error</h2>
+          <p className="text-gray-600">
+            Supabase environment variables are missing. Please check your deployment configuration.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   const handleEmailSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!supabase) return
     setLoading(true)
     setError(null)
 
@@ -45,6 +58,7 @@ export default function SignUpPage() {
   }
 
   const handleGoogleSignUp = async () => {
+    if (!supabase) return
     setLoading(true)
     setError(null)
 
@@ -62,6 +76,7 @@ export default function SignUpPage() {
   }
 
   const handleGitHubSignUp = async () => {
+    if (!supabase) return
     setLoading(true)
     setError(null)
 

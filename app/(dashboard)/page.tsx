@@ -18,14 +18,14 @@ export default async function DashboardPage() {
 
   // Get user from database
   const dbUser = await prisma.user.findUnique({
-    where: { clerkUserId: user.id },
+    where: { authUserId: user.id },
   })
 
   if (!dbUser) {
     // Create user if doesn't exist
     await prisma.user.create({
       data: {
-        clerkUserId: user.id,
+        authUserId: user.id,
         email: user.email || 'unknown@postplex.com',
         name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
       },

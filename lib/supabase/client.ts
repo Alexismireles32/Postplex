@@ -4,6 +4,7 @@
  */
 
 import { createBrowserClient } from '@supabase/ssr'
+import { SupabaseClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -16,12 +17,10 @@ if (!supabaseUrl || !supabaseAnonKey) {
   })
 }
 
-export function createClient() {
+export function createClient(): SupabaseClient | null {
   if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error(
-      'Supabase client cannot be created: Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY. ' +
-      'These must be set at build time for client-side usage.'
-    )
+    console.warn('Supabase client cannot be created: Missing environment variables.')
+    return null
   }
   
   return createBrowserClient(supabaseUrl, supabaseAnonKey)

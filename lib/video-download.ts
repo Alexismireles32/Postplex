@@ -3,7 +3,9 @@
  */
 
 import axios from 'axios';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client } from '@aws-sdk/client-s3';
+import { Upload } from '@aws-sdk/lib-storage';
+import { Readable } from 'stream';
 
 // Initialize R2 client
 const s3Client = new S3Client({
@@ -16,17 +18,18 @@ const s3Client = new S3Client({
 });
 
 /**
- * Download video from a public URL
+ * Download video from a public URL as a stream
  */
-export async function downloadVideo(url: string): Promise<Buffer> {
+export async function downloadVideoAsStream(url: string): Promise<{ stream: Readable; contentLength?: number }> {
   try {
     const response = await axios.get(url, {
-      responseType: 'arraybuffer',
+      responseType: 'stream',
       timeout: 60000, // 60 second timeout
-      maxContentLength: 500 * 1024 * 1024, // 500MB max
     });
 
-    return Buffer.from(response.data);
+    const contentLength = response.headers['content-length'] ? parseInt(response.headers['content-length']) : undefined;
+
+    return { stream: response.data, contentLength };
   } catch (error: unknown) {
     const err = error as { message?: string };
     console.error('Error downloading video:', err.message || error);
@@ -35,25 +38,31 @@ export async function downloadVideo(url: string): Promise<Buffer> {
 }
 
 /**
- * Upload video buffer to Cloudflare R2
+ * Upload video stream/buffer to Cloudflare R2 using streaming upload
  */
 export async function uploadToR2(
-  buffer: Buffer,
+  data: Readable | Buffer,
   key: string,
   contentType: string = 'video/mp4'
 ): Promise<string> {
   try {
-    const command = new PutObjectCommand({
-      Bucket: process.env.R2_BUCKET_NAME || 'postplex-videos',
-      Key: `videos/originals/${key}`,
-      Body: buffer,
-      ContentType: contentType,
+    const bucketName = process.env.R2_BUCKET_NAME || 'postplex-videos';
+    const targetKey = `videos/originals/${key}`;
+
+    const parallelUploads3 = new Upload({
+      client: s3Client,
+      params: {
+        Bucket: bucketName,
+        Key: targetKey,
+        Body: data,
+        ContentType: contentType,
+      },
     });
 
-    await s3Client.send(command);
+    await parallelUploads3.done();
 
     // Return public URL
-    const publicUrl = `${process.env.R2_PUBLIC_URL}/videos/originals/${key}`;
+    const publicUrl = `${process.env.R2_PUBLIC_URL}/${targetKey}`;
     return publicUrl;
   } catch (error: unknown) {
     const err = error as { message?: string };
