@@ -26,6 +26,15 @@ interface V3VideoInfo {
   cover: {
     url_list: string[];
   };
+  dynamic_cover?: {
+    url_list: string[];
+  };
+  origin_cover?: {
+    url_list: string[];
+  };
+  ai_dynamic_cover?: {
+    url_list: string[];
+  };
   play_addr: {
     url_list: string[];
   };
@@ -157,14 +166,18 @@ export class ScrapeCreatorClient {
 
     // Map videos from aweme_list to our normalized format
     const videos = data.aweme_list.map(v => {
-      // Get the best video URL (prefer play_addr)
-      const videoUrl = v.video.play_addr?.url_list?.[0] || 
-                       v.video.download_addr?.url_list?.[0] || 
-                       v.share_url || 
+      // Use share_url as the primary video URL (TikTok web link)
+      // This is more reliable than direct play URLs which may have CORS issues
+      const videoUrl = v.share_url || 
                        `https://www.tiktok.com/@${v.author.unique_id}/video/${v.aweme_id}`;
 
-      // Get thumbnail from cover
-      const thumbnailUrl = v.video.cover?.url_list?.[0] || '';
+      // Get thumbnail - prefer JPEG format (3rd in list) over HEIC (1st in list)
+      // HEIC is not widely supported in browsers, JPEG is the last URL
+      const thumbnailUrl = v.video.cover?.url_list?.[2] || // JPEG version
+                           v.video.dynamic_cover?.url_list?.[0] || 
+                           v.video.origin_cover?.url_list?.[0] || 
+                           v.video.cover?.url_list?.[0] || 
+                           '';
 
       return {
         url: videoUrl,
